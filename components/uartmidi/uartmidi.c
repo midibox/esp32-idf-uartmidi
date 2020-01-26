@@ -39,6 +39,9 @@
 #include "driver/uart.h"
 #include <sys/time.h>
 
+#include "nvs_flash.h"
+#include "nvs.h"
+
 #include "uartmidi.h"
 
 #if UARTMIDI_ENABLE_CONSOLE
@@ -87,6 +90,18 @@
 #if UARTMIDI_NUM_PORTS >= 4
 # error "Driver not prepared for more than 3 ports yet!"
 #endif
+
+
+// Switches UART interface between MIDI and Console
+// Has to be configured via Console Command "uartmidi_jumper" - overrule this define to predefine a pin w/o console
+#ifndef UARTMIDI_STORAGE_NAMESPACE
+#define UARTMIDI_STORAGE_NAMESPACE "MIDIbox_UART"
+#endif
+
+#ifndef UARTMIDI2_ENABLE_JUMPER_DEFAULT_PIN
+# define UARTMIDI2_ENABLE_JUMPER_DEFAULT_PIN 0
+#endif
+static uint8_t uartmidi_enable_jumper = UARTMIDI2_ENABLE_JUMPER_DEFAULT_PIN;
 
 
 // FIFO Sizes
@@ -142,6 +157,15 @@ static int32_t uartmidi_init_handle(uartmidi_handle_t *uart)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+// A dummy function to prevent debug output
+////////////////////////////////////////////////////////////////////////////////////////////////////
+static int uartmidi_filter_log(const char *format, __VALIST vargs)
+{
+  return 0;
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
 // Initialization
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 int32_t uartmidi_init(void *_callback_midi_message_received)
@@ -156,6 +180,50 @@ int32_t uartmidi_init(void *_callback_midi_message_received)
   uartmidi_callback_midi_message_received = _callback_midi_message_received;
 
   esp_log_level_set(UARTMIDI_TAG, ESP_LOG_WARN); // can be changed with the "blemidi_debug on" console command
+
+#if UARTMIDI_NUM_PORTS >= 3
+  {
+    uint8_t uartmidi2_enabled = 0;
+    nvs_handle nvs_handle;
+    esp_err_t err;
+
+    err = nvs_open(UARTMIDI_STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if( err != ESP_OK ) {
+      ESP_LOGW(UARTMIDI_TAG, "UARTMIDI Configuration not stored so far...");
+    } else {
+      int pin = 0;
+      err = nvs_get_i32(nvs_handle, "enable_jumper", &pin);
+
+      if( err != ESP_OK ) {
+        ESP_LOGW(UARTMIDI_TAG, "Failed to restore UART MIDI Enable Jumper");
+      } else {
+        uartmidi_enable_jumper = pin;
+
+        if( uartmidi_enable_jumper > 0 ) {
+          // this GPIO switches UART interface between MIDI and Console
+          gpio_pad_select_gpio(uartmidi_enable_jumper);
+          gpio_set_direction(uartmidi_enable_jumper, GPIO_MODE_INPUT);
+
+          // TODO: enable internal Pull-Up?
+          // TODO: wait some mS?
+
+          uartmidi2_enabled = gpio_get_level(uartmidi_enable_jumper) ? 0 : 1;
+        }
+
+        if( !uartmidi2_enabled ) {
+          // Don't print if MIDI enabled
+          ESP_LOGW(UARTMIDI_TAG, "Restored UART MIDI Enable Jumper at Pin: %d", uartmidi_enable_jumper);
+          ESP_LOGW(UARTMIDI_TAG, "UART%d based MIDI Disabled", UARTMIDI_PORT2_DEV);
+        }
+      }
+
+      if( uartmidi2_enabled ) {
+        esp_log_set_vprintf(&uartmidi_filter_log);
+        uartmidi_enable_port(2, 31250);
+      }
+    }
+  }
+#endif
 
   return 0; // no error
 }
@@ -271,6 +339,19 @@ int32_t uartmidi_disable_port(uint8_t uartmidi_port)
   }
 
   return 0; // no error
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////////////////////
+// Returns != 0 if UART Port is enabled
+////////////////////////////////////////////////////////////////////////////////////////////////////
+int32_t uartmidi_get_enabled(uint8_t uartmidi_port)
+{
+  if( uartmidi_port >= UARTMIDI_NUM_PORTS )
+    return 0; // invalid port
+
+  uartmidi_handle_t *uart = &uartmidi_handle[uartmidi_port];
+  return (uart->dev >= 0) ? 1 : 0;
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -551,6 +632,51 @@ static int cmd_uartmidi_debug(int argc, char **argv)
   return 0; // no error
 }
 
+static struct {
+  struct arg_int *pin;
+  struct arg_end *end;
+} uartmidi_jumper_args;
+
+static int cmd_uartmidi_jumper(int argc, char **argv)
+{
+  int nerrors = arg_parse(argc, argv, (void **)&uartmidi_jumper_args);
+  if( nerrors != 0 ) {
+      arg_print_errors(stderr, uartmidi_jumper_args.end, argv[0]);
+      return 1;
+  }
+
+#if UARTMIDI_NUM_PORTS >= 3
+  uartmidi_enable_jumper = uartmidi_jumper_args.pin->ival[0];
+
+  if( uartmidi_enable_jumper > 0 ) {
+    printf("UART%d will be enabled via jumper at pin %d with next power-on reset.\n", UARTMIDI_PORT2_DEV, uartmidi_enable_jumper);
+  } else {
+    printf("UART%d permanently disabled with next power-on reset (no pin assigned to jumper).\n", UARTMIDI_PORT2_DEV);
+  }
+
+  {
+    nvs_handle nvs_handle;
+    esp_err_t err;
+
+    err = nvs_open(UARTMIDI_STORAGE_NAMESPACE, NVS_READWRITE, &nvs_handle);
+    if( err != ESP_OK ) {
+      ESP_LOGE(UARTMIDI_TAG, "UART MIDI Configuration can't be stored!");
+      return -1;
+    }
+
+    err = nvs_set_i32(nvs_handle, "enable_jumper", uartmidi_enable_jumper);
+    if( err != ESP_OK ) {
+      ESP_LOGE(UARTMIDI_TAG, "Failed to store enable_jumper!");
+      return -1;
+    }
+  }
+#else
+  printf("UART0 not available in this application.\n");
+#endif
+
+  return 0; // no error
+}
+
 void uartmidi_register_console_commands(void)
 {
   {
@@ -566,6 +692,21 @@ void uartmidi_register_console_commands(void)
     };
 
     ESP_ERROR_CHECK( esp_console_cmd_register(&uartmidi_debug_cmd) );
+  }
+
+  {
+    uartmidi_jumper_args.pin = arg_int1(NULL, "pin", "<pin>", "GPIO Input connected to a Jumper to enable/disable UART0");
+    uartmidi_jumper_args.end = arg_end(20);
+
+    const esp_console_cmd_t uartmidi_jumper_cmd = {
+      .command = "uartmidi_jumper",
+      .help = "Enables/Disables UART0 via Jumper",
+      .hint = NULL,
+      .func = &cmd_uartmidi_jumper,
+      .argtable = &uartmidi_jumper_args
+    };
+
+    ESP_ERROR_CHECK( esp_console_cmd_register(&uartmidi_jumper_cmd) );
   }
 }
 

@@ -90,6 +90,16 @@ extern int32_t uartmidi_enable_port(uint8_t uartmidi_port, uint32_t baudrate);
 extern int32_t uartmidi_disable_port(uint8_t uartmidi_port);
 
 /**
+ * @brief Returns MIDI Port Status
+ *
+ * @return != 0 if UART Port is enabled
+ *
+ */
+//
+////////////////////////////////////////////////////////////////////////////////////////////////////
+extern int32_t uartmidi_get_enabled(uint8_t uartmidi_port);
+
+/**
  * @brief Sends a MIDI message over UART
  *
  * @param  uartmidi_port UART port
