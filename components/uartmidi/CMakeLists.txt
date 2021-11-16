@@ -1,4 +1,3 @@
-set(COMPONENT_SRCS "uartmidi.c")
-set(COMPONENT_ADD_INCLUDEDIRS "include")
-set(COMPONENT_REQUIRES nvs_flash console)
-register_component()
+idf_component_register(SRCS "uartmidi.c"
+                       INCLUDE_DIRS "include"
+                       PRIV_REQUIRES nvs_flash console)
