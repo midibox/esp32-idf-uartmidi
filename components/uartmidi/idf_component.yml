@@ -1,0 +1,8 @@
+version: "0.0.1"
+description: Midi Driver for ESP32
+targets:
+  - esp32
+
+dependencies:
+  idf:
+    version: ">=4.0"
