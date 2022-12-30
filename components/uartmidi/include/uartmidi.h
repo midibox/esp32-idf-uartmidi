@@ -33,12 +33,8 @@
 #ifndef _UARTMIDI_H
 #define _UARTMIDI_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
+#include <stddef.h>
 #include <stdint.h>
-
 
 #ifndef UARTMIDI_TAG
 #define UARTMIDI_TAG "UARTMIDI"
@@ -55,6 +51,11 @@ extern "C" {
 #ifndef UARTMIDI_ENABLE_CONSOLE
 #define UARTMIDI_ENABLE_CONSOLE 1
 #endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief Initializes the UART MIDI Drvier
  *
@@ -140,9 +141,12 @@ extern int32_t uartmidi_tick(void);
  * @return < 0 on errors
  */
 extern void uartmidi_register_console_commands(void);
+
 #endif
+
 #ifdef __cplusplus
 }
 #endif
 
 #endif /* _UARTMIDI_H */
+

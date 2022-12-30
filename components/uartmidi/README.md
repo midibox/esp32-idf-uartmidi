@@ -74,3 +74,20 @@ Currently no comfortable API exists, it might come later:
       uartmidi_send_message(uartmidi_port, message, sizeof(message));
     }
 ```
+
+## Using with IDF Component Manager
+
+Simply add to your idf_component.yml
+```
+## IDF Component Manager Manifest File
+dependencies:
+  uartmidi:
+    version: ">=0.0.1"
+    path: components/uartmidi
+    git: https://github.com/midibox/esp32-idf-uartmidi.git
+
+```
+
+See the documentation
+[here](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-guides/tools/idf-component-manager.html)
+for more informations.

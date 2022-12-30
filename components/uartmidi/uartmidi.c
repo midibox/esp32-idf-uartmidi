@@ -30,24 +30,24 @@
  * =============================================================================
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include "uartmidi.h"
 
-#include "esp_system.h"
-#include "esp_log.h"
+#include "driver/gpio.h"
 #include "driver/uart.h"
-#include <sys/time.h>
-
 #include "nvs_flash.h"
 #include "nvs.h"
-
-#include "uartmidi.h"
+#include "esp_system.h"
+#include "esp_log.h"
 
 #if UARTMIDI_ENABLE_CONSOLE
 # include "esp_console.h"
 # include "argtable3/argtable3.h"
 #endif
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/time.h>
 
 // HW and Pin assignments (can be overruled if required)
 #if UARTMIDI_NUM_PORTS >= 1
